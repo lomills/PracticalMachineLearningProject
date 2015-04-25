@@ -1,0 +1,249 @@
+---
+title: "A Classification Model for the Quality of Dumbbell Exercises"
+author: "Len Mills"
+date: "April 25, 2015"
+output: 
+    html_document:
+        toc: true
+---
+
+## Abstract
+Participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes.
+
+I tested five machine learning algorithms: Recursive Partitioning (rpart), Bagging (treebag), Random Forest (rf) Gradient Boosting (gbm), Quadratic Discriminant Analysis (qda).  I used the Accuracy and Kappa measures to evaluate each predictive model.  Based on these results, I selected the Random Forest model although the Tree Bagging and Gradient Boosting produced accurate test results as well.  The Recursive Partition and Quadratic Discriminant models were not as accurate. 
+
+Cross-validation results were calculated and show that 99% out-of-sample accuracy is to be expected weh the sample size is 20 as in the submission test data set. 
+
+
+# Setup of Packages and Functions
+
+
+```{r setup}
+library(caret)
+library(randomForest)
+library(plyr)
+
+#function to write answer files
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+```
+
+
+# Data Preparation and Partitioning
+
+The data for this project has been generously provided from this [source](http://groupware.les.inf.puc-rio.br/har). I restricted the predictor features used in building the model to only those with no missing observations in the submission test data set.  I partitioned the pml.training.csv into 60% train and 40% test data sets.  The train data set is used to build the model, and the test data set is used to evaluate the predictive performance of the alternative models.
+
+
+```{r dataPrepAndPartition}
+pml.testing <- read.csv("pml-testing.csv")
+obs <- colSums(!is.na(pml.testing))
+pml.testing <- pml.testing[,obs==20]
+var_names <- colnames(pml.testing)
+var_names <- var_names[-c(1,2,3,4,5,6,7,60)]
+
+training <- read.csv("pml-training.csv")
+
+set.seed(32323)
+sample <- createDataPartition(y=training$classe,p=0.60,list=FALSE)
+train <- training[sample,]
+dim(train)
+predictors_train <- train[,colnames(train) %in% var_names]
+dim(predictors_train)
+
+test <- training[-sample,]
+dim(test)
+predictors_test <- test[,colnames(test) %in% var_names]
+dim(predictors_test)
+```
+
+
+# Alternative Machine Learning Algorithms
+
+I tested five machine learning algorithms:
+
+1. Recursive Partitioning (rpart)
+2. Bagging (treebag)
+3. Random Forest (rf)
+4. Gradient Boosting (gbm)
+5. Quadratic Discriminant Analysis (qda)
+
+For each algorithm, I examined the predictive performance of the model by generating the confusion matrix and accuracy measures on the hold-out test partition from pml.training.csv file.  Each algorithm is presented in the next subsections of this report.  For completeness, the confusion matrix and is also tabulated for the train data set, but these matrices are not used to select the final model.
+
+
+## Recursive Partitioning (rpart)
+
+
+```{r trees}
+model.rpart <- train(train$classe ~ .,method='rpart',data=predictors_train)
+prediction_train <- predict(model.rpart,predictors_train)
+cfm_train_rpart <- confusionMatrix(train$classe,prediction_train)
+cfm_train_rpart$table
+
+# using test data set
+prediction_test <- predict(model.rpart,predictors_test)
+cfm_test_rpart <- confusionMatrix(test$classe,prediction_test)
+cfm_test_rpart$table
+round(100*cfm_test_rpart$overall,2)
+```
+
+
+## Bagging (treebag)
+
+
+```{r bagging, warning=FALSE}
+#treebag
+model.tb <- train(train$classe ~ .,method='treebag',data=predictors_train)
+prediction_train <- predict(model.tb,predictors_train)
+cfm_train_tb <- confusionMatrix(train$classe,prediction_train)
+cfm_train_tb$table
+
+# using test data set
+prediction_test <- predict(model.tb,predictors_test)
+cfm_test_tb <- confusionMatrix(test$classe,prediction_test)
+cfm_test_tb$table
+round(100*cfm_test_tb$overall,2)
+```
+
+
+## Random Forest (rf)
+
+
+```{r random forest}
+model.rf <- randomForest(train$classe ~ ., data=predictors_train, importance=TRUE,proximity=TRUE)
+prediction_train <- predict(model.rf,predictors_train)
+cfm_train_rf <- confusionMatrix(train$classe,prediction_train)
+cfm_train_rf$table
+
+# using test data set
+prediction_test <- predict(model.rf,predictors_test)
+cfm_test_rf <- confusionMatrix(test$classe,prediction_test)
+cfm_test_rf$table
+round(100*cfm_test_rf$overall,2)
+```
+
+
+## Gradient Boosting (gbm)
+
+
+```{r boosting}
+model.gbm <- train(train$classe ~ .,method='gbm',data=predictors_train,verbose=FALSE)
+prediction_train <- predict(model.gbm,predictors_train)
+cfm_train_gbm <- confusionMatrix(train$classe,prediction_train)
+cfm_train_gbm$table
+
+# using test data set
+prediction_test <- predict(model.gbm,predictors_test)
+cfm_test_gbm <- confusionMatrix(test$classe,prediction_test)
+cfm_test_gbm$table
+round(100*cfm_test_gbm$overall,2)
+```
+
+
+## Quadratic Discriminant Analysis (qda)
+
+
+```{r discriminant}
+model.qda <- train(train$classe ~ .,method='qda',data=predictors_train)
+prediction_train <- predict(model.qda,predictors_train)
+cfm_train_qda <- confusionMatrix(train$classe,prediction_train)
+cfm_train_qda$table
+
+# using test data set
+prediction_test <- predict(model.qda,predictors_test)
+cfm_test_qda <- confusionMatrix(test$classe,prediction_test)
+cfm_test_qda$table
+round(100*cfm_test_qda$overall,2)
+```
+
+
+# Comparing Prediction Accuracies
+
+I used the Accuracy and Kappa statistics from the test data set to select the model to be used in the submission.
+
+
+```{r comparisons}
+results <- rbind(round(100*cfm_test_rpart$overall,2),
+                 round(100*cfm_test_rf$overall,2),
+                 round(100*cfm_test_tb$overall,2),
+                 round(100*cfm_test_gbm$overall,2),
+                 round(100*cfm_test_qda$overall,2))
+rownames(results) <- c("recursive partition","random forest",
+                       "tree bagging","gradient boosting","quadratic discriminant")
+results
+
+selectedModel <- model.rf  # selected model is set here
+```
+
+Based on the results from the hold-out test data set, I selected the Random Forest model although the Tree Bagging and Gradient Boosting produced accurate test results as well.  The Recursive Partition and Quadratic Discriminant models were not as accurate. 
+
+
+# Relative Importance of Variables
+
+I examined the relative importance of the variables and did a spot check on the most important variable, which was the roll-belt.  As can be seen, the median of the roll_belt is substantially lower for classe A (correct performance) compared to the other four classes.
+
+
+```{r variableImportance}
+
+varImpPlot(selectedModel,main="Variable Importance Plot on Selected Model")
+
+ggplot(predictors_train, aes(train$classe,predictors_train[,"roll_belt"],fill=train$classe)) + 
+        geom_boxplot() + geom_jitter(position = position_jitter(width = .15)) +
+        ylab("roll_belt") + guides(fill=FALSE) + ggtitle("Most Important Variable")
+
+ddply(predictors_train, .(train$classe), summarise, median_roll_belt = median(roll_belt))
+
+```
+
+
+# Cross Validation
+
+The selected model was cross-validated using the test data set.  I used cross-fold validation with 20 observations for each fold in order to gauge the expected accuracy for the submission test cases of the same size.
+
+
+```{r crossValidation}
+set.seed(32323)
+numFolds = floor(dim(test)[1]/20)  # set the number of folds to get approximately 20 test cases
+folds <- createFolds(y=test$classe,k=numFolds,list=TRUE,returnTrain=FALSE)
+
+summary(sapply(folds,length)) # checks the length of the folds for cross-validation
+
+accuracy_stat <- rep(0,times=numFolds)
+kappa_stat <- rep(0,times=numFolds)
+for (i in (1:numFolds)){
+        test_fold <- test[folds[[i]],]
+        predictors_test_fold <- test_fold[,colnames(test) %in% var_names]
+        dim(predictors_test_fold)
+        prediction_test_fold <- predict(selectedModel,predictors_test_fold)
+        cfm_test_rf <- confusionMatrix(test_fold$classe,prediction_test_fold)
+        accuracy_stat[i] <- cfm_test_rf$overall[1]
+        kappa_stat[i] <- cfm_test_rf$overall[2]
+}
+summary(accuracy_stat)
+hist(accuracy_stat,col="red", main="Histogram of Test Fold Accuracy")
+summary(kappa_stat)
+hist(kappa_stat,col="green", main="Histogram of Test Fold Kappa")
+```
+
+I expect a out-of-sample error of `r floor(100*summary(accuracy_stat)[4])` in the submission data set.  This is based on the mean of the `r numFolds` cross-validation samples shown above.  The range of out-of-sample errors is between `r floor(100*summary(accuracy_stat)[1])` and `r floor(100*summary(accuracy_stat)[6])`.
+ 
+
+# Final Results:  To be Submitted on Testing Data Set
+
+The predictions (or "answers") for the submission data set, pml.testing.csv, are derived below for the selected model.  
+```{r submissionRresults}
+dim(pml.testing)
+predictors_pml.testing <- pml.testing[,colnames(pml.testing) %in% var_names]
+dim(predictors_pml.testing)
+answers <- predict(selectedModel,predictors_pml.testing)
+answers <- as.character(answers)
+
+answers
+
+pml_write_files(answers)
+```
